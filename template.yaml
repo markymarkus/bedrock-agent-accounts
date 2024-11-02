@@ -1,0 +1,183 @@
+---
+###
+## Parameters
+Parameters:
+  AgentName:
+    Default: accounts-metadata-agent-dev
+    Type: String
+    Description: The name of the agent.
+  ModelName:
+    Default: anthropic.claude-3-haiku-20240307-v1:0
+    Type: String
+  EnableMockData:
+    Default: "true"
+    Type: String
+    Description: If enabled, the agent will return mock data instead of calling AWS APIs.
+###
+## Resources
+Resources:
+  AmazonBedrockExecutionRoleForAgent:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: bedrock.amazonaws.com
+          Action: sts:AssumeRole
+          Condition: 
+            StringEquals:
+              aws:SourceAccount: !Ref AWS::AccountId
+      Policies:
+        - PolicyName: root
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: 'bedrock:InvokeModel'
+                Resource: !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/${ModelName}'
+
+  AccountAgent:
+      Type: AWS::Bedrock::Agent
+      Properties:
+        AgentName: !Ref AgentName
+        AgentResourceRoleArn: !GetAtt AmazonBedrockExecutionRoleForAgent.Arn
+        AutoPrepare: true
+        FoundationModel: !Ref ModelName
+        Instruction: "You are assistant that provides information about AWS accounts and their costs. Your answers are short and can be technical. If you think provided prompt is not about AWS accounts, you will answer based on your general knowledge."
+        Description: "Account metadata and costs agent."
+        IdleSessionTTLInSeconds: 900
+        ActionGroups:
+          - ActionGroupName: "account-metadata"
+            Description: "This action group is used to get list of accounts and all the related metadata from Organizations API."
+            ActionGroupExecutor:
+              Lambda: !GetAtt AgentFunction.Arn
+            ApiSchema: 
+              Payload: |
+                openapi: 3.0.0
+                info:
+                  title: Account basic info and costs API
+                  version: 1.0.0
+                  description: APIs for querying AWS account's metadata, tags and costs.
+                paths:
+                  "/accounts":
+                    get:
+                      summary: Gets the list of all accounts
+                      description: Gets the list of all accounts in Organizations. Returns account metadata like when it was created, who is the owner and so.
+                      operationId: getAllAccounts
+                      responses:
+                        '200':
+                          description: Gets the list of accounts
+                          content:
+                            application/json:
+                              schema:
+                                type: array
+                                items:
+                                  type: object
+                                  properties:
+                                    Id:
+                                      type: string
+                                      description: Unique ID of the account.
+                                    Name:
+                                      type: string
+                                      description: Friendly name of the account.
+                                    Status:
+                                      type: string
+                                      description: The status of the account. Account can be in Active or Suspended state. Suspended means same as Closed.
+                                    JoinedTimestamp:
+                                      type: string
+                                      description: Time and date when the account was created.
+                                    Tags:
+                                      type: array
+                                      description: Array of account's tags. These include metadata associated with the account.
+                  "/account/{accountId}/costs":
+                    get:
+                      summary: Gets current costs for a specific account
+                      description: Retrieves costs and currency for a given account.
+                      operationId: getCosts
+                      parameters:
+                      - name: accountId
+                        in: path
+                        description: Unique ID of the account
+                        required: true
+                        schema:
+                          type: string
+                      - name: start_date
+                        in: query
+                        description: Start date for filtering costs in YYYY-MM-DD format.
+                        required: false
+                        schema:
+                          type: string
+                          format: date
+                      - name: end_date
+                        in: query
+                        description: End date for filtering costs in YYYY-MM-DD format.
+                        required: false
+                        schema:
+                          type: string
+                          format: date
+                      responses:
+                        '200':
+                          description: Current costs for the account
+                          content:
+                            application/json:
+                              schema:
+                                type: object
+                                properties:
+                                  Costs:
+                                    type: string
+                                    description: Costs in USD for a given account.
+
+  ResourcePolicy:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt AgentFunction.Arn
+      Principal: bedrock.amazonaws.com
+      SourceAccount: !Sub ${AWS::AccountId}
+      SourceArn: !Sub arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:agent/*
+
+  AgentFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: index.lambda_handler
+      Description: "Function get account data from CE and Organizations"
+      Timeout: 30
+      Role: !GetAtt LambdaBasicExecutionRole.Arn
+      Runtime: python3.12
+      Code: src/
+      Environment:
+        Variables:
+          EnableMock: !Ref EnableMockData
+
+  LambdaBasicExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: lambda.amazonaws.com
+          Action: sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: MetadataPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                 - organizations:ListAccounts
+                 - organizations:ListTagsForResource
+                 - ce:GetCostAndUsage
+                Resource: '*'
+        - PolicyName: AWSLambdaBasicExecutionRole
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: arn:aws:logs:*:*:*
