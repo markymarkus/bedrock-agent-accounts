@@ -1,5 +1,6 @@
 import logging
 import boto3
+from datetime import datetime
 from botocore.exceptions import ClientError
 import random
 
@@ -17,6 +18,8 @@ def check_nested_structure(data):
     return data.get('trace', {}).get('trace', {}).get('orchestrationTrace', {}).get('modelInvocationOutput', {}).get('metadata', {}).get('usage', None) is not None
 
 def invoke_agent_with_prompt(prompt):
+    current_date = datetime.now().strftime("%Y-%m-%d")
+
     try:
         response = agent_client.invoke_agent(
             agentId=agent_id,
@@ -24,6 +27,11 @@ def invoke_agent_with_prompt(prompt):
             sessionId=session_id,
             inputText=prompt,
             enableTrace=True,
+            sessionState={
+                "promptSessionAttributes": {
+                 "CURRENT_DATE": current_date
+                }
+            },
         )
 
         completion = ""

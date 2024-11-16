@@ -3,9 +3,13 @@ import random
 from datetime import datetime, timedelta
 
 account_costs = {}
+accounts_data = []
 
 def mock_get_all_accounts_with_tags():
-    accounts_data = []
+
+    # If sample data already exists, return it
+    if accounts_data:
+        return accounts_data
 
     # More creative account names
     sample_account_names = [

@@ -14,6 +14,10 @@ Parameters:
     Type: String
     Description: If enabled, the agent will return mock data instead of calling AWS APIs.
 ###
+## Conditions
+Conditions:
+  IsMockDataEnabled: !Equals [!Ref EnableMockData, "true"]
+###
 ## Resources
 Resources:
   AmazonBedrockExecutionRoleForAgent:
@@ -44,7 +48,16 @@ Resources:
         AgentResourceRoleArn: !GetAtt AmazonBedrockExecutionRoleForAgent.Arn
         AutoPrepare: true
         FoundationModel: !Ref ModelName
-        Instruction: "You are assistant that provides information about AWS accounts and their costs. Your answers are short and can be technical. If you think provided prompt is not about AWS accounts, you will answer based on your general knowledge."
+        Instruction: |
+          <instructions>You are an assistant specializing in AWS account information and cost analysis.
+          Provide brief, technical answers focused on AWS accounts and costs.
+          If a prompt does not relate to AWS accounts, respond based on general knowledge.</instructions>
+          <output_format>
+          Always:
+          - Use specific dates (e.g., 'September 2024') instead of relative terms (like 'last month').
+          - Present account metadata and cost information in a table format with clearly aligned columns.
+          - Present account Tags as separate columns(like Environment, Owner, etc).
+          </output_format>
         Description: "Account metadata and costs agent."
         IdleSessionTTLInSeconds: 900
         ActionGroups:
@@ -105,14 +118,14 @@ Resources:
                       - name: start_date
                         in: query
                         description: Start date for filtering costs in YYYY-MM-DD format.
-                        required: false
+                        required: true
                         schema:
                           type: string
                           format: date
                       - name: end_date
                         in: query
                         description: End date for filtering costs in YYYY-MM-DD format.
-                        required: false
+                        required: true
                         schema:
                           type: string
                           format: date
@@ -161,16 +174,19 @@ Resources:
           Action: sts:AssumeRole
       Path: /
       Policies:
-        - PolicyName: MetadataPolicy
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                 - organizations:ListAccounts
-                 - organizations:ListTagsForResource
-                 - ce:GetCostAndUsage
-                Resource: '*'
+        - !If
+          - IsMockDataEnabled
+          - PolicyName: MetadataPolicy
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - organizations:ListAccounts
+                    - organizations:ListTagsForResource
+                    - ce:GetCostAndUsage
+                  Resource: '*'
+          - !Ref "AWS::NoValue"
         - PolicyName: AWSLambdaBasicExecutionRole
           PolicyDocument:
             Version: '2012-10-17'
@@ -181,3 +197,9 @@ Resources:
                   - logs:CreateLogStream
                   - logs:PutLogEvents
                 Resource: arn:aws:logs:*:*:*
+###
+## Outputs
+Outputs:
+  AgentId:
+    Description: The ID of the agent.
+    Value: !Ref AccountAgent
