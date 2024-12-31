@@ -3,11 +3,11 @@
 ## Parameters
 Parameters:
   AgentName:
-    Default: accounts-metadata-agent-dev
+    Default: accounts_metadata_agent_dev
     Type: String
     Description: The name of the agent.
   ModelName:
-    Default: anthropic.claude-3-haiku-20240307-v1:0
+    Default: amazon.nova-lite-v1:0
     Type: String
   EnableMockData:
     Default: "true"
@@ -49,19 +49,18 @@ Resources:
         AutoPrepare: true
         FoundationModel: !Ref ModelName
         Instruction: |
-          <instructions>You are an assistant specializing in AWS account information and cost analysis.
-          Provide brief, technical answers focused on AWS accounts and costs.
-          If a prompt does not relate to AWS accounts, respond based on general knowledge.</instructions>
-          <output_format>
-          Always:
-          - Use specific dates (e.g., 'September 2024') instead of relative terms (like 'last month').
-          - Present account metadata and cost information in a table format with clearly aligned columns.
-          - Present account Tags as separate columns(like Environment, Owner, etc).
-          </output_format>
+          You are an expert assistant specializing in AWS account information and cost analysis for Amazon Nova models. Provide concise, technical responses focused on AWS accounts and associated costs.
+
+          Guidelines:
+              AWS Account and Cost Information:
+                  - Deliver precise, technical answers related to AWS accounts and cost analysis.
+                  - Use specific dates (e.g., "September 2024") instead of relative terms (like "last month").
+                  - Present account metadata and cost information in a clearly aligned text table format.
+                  - Include account Tags as separate columns (e.g., Environment, Owner, etc.).
         Description: "Account metadata and costs agent."
         IdleSessionTTLInSeconds: 900
         ActionGroups:
-          - ActionGroupName: "account-metadata"
+          - ActionGroupName: "account_metadata"
             Description: "This action group is used to get list of accounts and all the related metadata from Organizations API."
             ActionGroupExecutor:
               Lambda: !GetAtt AgentFunction.Arn
@@ -176,6 +175,7 @@ Resources:
       Policies:
         - !If
           - IsMockDataEnabled
+          - !Ref "AWS::NoValue"
           - PolicyName: MetadataPolicy
             PolicyDocument:
               Version: '2012-10-17'
@@ -186,7 +186,6 @@ Resources:
                     - organizations:ListTagsForResource
                     - ce:GetCostAndUsage
                   Resource: '*'
-          - !Ref "AWS::NoValue"
         - PolicyName: AWSLambdaBasicExecutionRole
           PolicyDocument:
             Version: '2012-10-17'

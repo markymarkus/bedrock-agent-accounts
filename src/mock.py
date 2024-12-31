@@ -6,7 +6,6 @@ account_costs = {}
 accounts_data = []
 
 def mock_get_all_accounts_with_tags():
-
     # If sample data already exists, return it
     if accounts_data:
         return accounts_data
@@ -42,7 +41,7 @@ def mock_get_all_accounts_with_tags():
     ]
 
     # Generate mock accounts
-    for i in range(1, 11):  # Simulate 10 accounts
+    for i in range(1, 31):  # Simulate 10 accounts
         account_id = f"1234567890{i:02}"  # Format IDs for consistent length
         account_name = random.choice(sample_account_names)
         account_status = random.choice(status_distribution)
@@ -63,8 +62,6 @@ def mock_get_all_accounts_with_tags():
         sample_tags = {
             "Environment": random.choice(["dev", "prod", "test"]),
             "Owner": owner_email,
-            "Project": random.choice(["ProjectX", "ProjectY", "ProjectZ", "ProjectAlpha"]),
-            "Department": random.choice(["IT", "Finance", "HR", "R&D"]),
             "Region": random.choice(["us-east-1", "eu-west-1", "ap-south-1"])
         }
 
